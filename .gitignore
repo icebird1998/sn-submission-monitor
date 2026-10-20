@@ -1,0 +1,10 @@
+# 个人配置与运行时数据，切勿提交
+config.json
+state.json
+sn_storage.json
+*.log
+*.log.1
+
+__pycache__/
+*.pyc
+.playwright/

@@ -1,0 +1,30 @@
+{
+  "platform": "sn",
+
+  "sn": {
+    "email": "you@example.com",
+    "password": "YOUR_SN_PASSWORD",
+    "watch": "all"
+  },
+
+  "mts": {
+    "base": "https://mts-ncomms.nature.com",
+    "email": "you@example.com",
+    "password": "YOUR_MTS_PASSWORD",
+    "watch": "all",
+    "ms_id": null
+  },
+
+  "notify": {
+    "toast": true,
+    "email": {
+      "smtp_host": "smtp.qq.com",
+      "smtp_port": 465,
+      "smtp_user": "you@example.com",
+      "smtp_auth_code": "YOUR_SMTP_AUTH_CODE",
+      "to": "you@example.com"
+    }
+  },
+
+  "fail_alert_after": 6
+}
