@@ -639,12 +639,28 @@ def check_once(app):
     for key, item in em_items.items():
         old = st["em"].get(key)
         if old is None:
-            fresh = True
-            st["em"][key] = {k: item.get(k) for k in
-                             ("signature", "journal", "title", "status", "number",
-                              "status_date", "url")}
-            log("EM 基线 [%s] %s: %s" % (item.get("journal", key), key, item["status"]),
-                app.log_file)
+            # 投稿初期 EM 行没有稿件号（按标题做键），编辑部分配编号后会变成新键。
+            # 按标题匹配旧记录视为同一篇，避免漏发通知。
+            prev_key = next((k for k, v in st["em"].items()
+                             if k != key and norm(v.get("title") or "") ==
+                             norm(item.get("title") or "")), None)
+            if prev_key:
+                old = st["em"][prev_key]
+                if old.get("signature") != item["signature"]:
+                    changes.append(("em", key, item, old))
+                st["em"][key] = {k: item.get(k) for k in
+                                 ("signature", "journal", "title", "status", "number",
+                                  "status_date", "url")}
+                del st["em"][prev_key]
+                log("EM 稿件获得编号，迁移记录：%s -> %s" % (prev_key[:30] + "...", key),
+                    app.log_file)
+            else:
+                fresh = True
+                st["em"][key] = {k: item.get(k) for k in
+                                 ("signature", "journal", "title", "status", "number",
+                                  "status_date", "url")}
+                log("EM 基线 [%s] %s: %s" % (item.get("journal", key), key, item["status"]),
+                    app.log_file)
         elif old["signature"] != item["signature"]:
             changes.append(("em", key, item, old))
         else:
