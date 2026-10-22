@@ -15,6 +15,14 @@
     "ms_id": null
   },
 
+  "em": {
+    "base": "https://www.editorialmanager.com/JOURNAL_CODE",
+    "label": "Optional Journal Display Name",
+    "email": "you@example.com",
+    "password": "YOUR_EM_PASSWORD",
+    "watch": "all"
+  },
+
   "notify": {
     "toast": true,
     "email": {

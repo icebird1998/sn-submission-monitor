@@ -10,8 +10,9 @@
 |---|---|---|
 | **Springer Nature 投稿平台**（submission.springernature.com） | Scientific Reports、Communications Earth & Environment、Communications Physics / Biology / Medicine、npj 系列、Earth Science Informatics 等 | Playwright 无头浏览器 |
 | **Aries MTS / ScholarOne**（mts-*.nature.com） | Nature Communications 等 Nature 系列期刊 | 纯 HTTP 请求（无需浏览器） |
+| **Editorial Manager**（editorialmanager.com/期刊代码） | Geoscience Frontiers 及 Elsevier/学会旗下数千种期刊 | Playwright 无头浏览器 |
 
-判断方法：你投稿时打开的网址是 `submission.springernature.com/...` 就是前者；是 `mts-xxx.nature.com/...` 就是后者。
+判断方法：投稿系统网址是 `submission.springernature.com/...` 就是 SN；是 `mts-xxx.nature.com/...` 就是 MTS；是 `www.editorialmanager.com/xxx/...`（xxx 为期刊代码）就是 EM。
 
 ## 特性
 
@@ -51,7 +52,7 @@ python -m playwright install chromium
 
 ```jsonc
 {
-  "platform": "sn",            // "sn" | "mts" | "both"
+  "platform": "sn",            // "sn" | "mts" | "em" | "both" | "all"，或数组如 ["sn","em"]
   "sn": {
     "email": "you@example.com",
     "password": "YOUR_PASSWORD",
@@ -63,6 +64,13 @@ python -m playwright install chromium
     "password": "YOUR_PASSWORD",
     "watch": "all",            // "all" 或配合 ms_id 只盯一篇
     "ms_id": null
+  },
+  "em": {
+    "base": "https://www.editorialmanager.com/gsf",  // 换成你的期刊代码
+    "label": "Geoscience Frontiers",                  // 可选，通知里显示的期刊名
+    "email": "you@example.com",
+    "password": "YOUR_PASSWORD",
+    "watch": "all"
   },
   "notify": {
     "toast": true,             // Windows 弹窗（非 Windows 自动忽略）
@@ -88,6 +96,7 @@ QQ 邮箱网页版 → 设置 → 账号（账号与安全）→ 开启 **IMAP/S
 |---|---|
 | `SNM_SN_PASSWORD` | 覆盖 SN 平台密码 |
 | `SNM_MTS_PASSWORD` | 覆盖 MTS 密码 |
+| `SNM_EM_PASSWORD` | 覆盖 Editorial Manager 密码 |
 | `SNM_SMTP_AUTH_CODE` | 覆盖 SMTP 授权码 |
 
 ## 使用
@@ -147,7 +156,8 @@ cron 示例（每 15 分钟）：
 
 - **SN 平台**：Playwright 无头 Chromium 走 Springer Nature 统一登录（idp.springernature.com），登录态缓存于 `sn_storage.json`；之后抓取 "Your submissions" 列表页，解析每篇稿件的状态卡片；检测到变化时再抓对应详情页，把 CURRENT STATUS 全文和进度写进通知
 - **MTS**：requests 直接 POST 登录，遍历稿件文件夹（Live / Post Decision 等）读取每篇的 Current Stage
-- 状态快照存于 `state.json`，每次比对签名（状态文本 + 版本号），变化即通知并更新快照
+- **EM**：Playwright 进入 Editorial Manager 登录框（frame 内表单），登录后解析作者主菜单中数量非零的板块（处理中 / 需修改 / 已有决定等），逐板块读取稿件表格；登录态缓存于 `em_storage.json`
+- 状态快照存于 `state.json`，每次比对签名（状态文本 + 版本号 / 状态日期），变化即通知并更新快照
 
 ## License
 

@@ -8,3 +8,4 @@ sn_storage.json
 __pycache__/
 *.pyc
 .playwright/
+em_storage.json

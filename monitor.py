@@ -3,7 +3,7 @@
 """
 sn-submission-monitor — 期刊投稿状态监控通知工具
 
-监控两类投稿系统下的稿件状态，一有变化立刻通知（Windows 弹窗 / 邮件）：
+监控三类投稿系统下的稿件状态，一有变化立刻通知（Windows 弹窗 / 邮件）：
 
 1. Springer Nature 投稿平台 (submission.springernature.com)
    覆盖 Scientific Reports、Communications Earth & Environment、
@@ -13,6 +13,10 @@ sn-submission-monitor — 期刊投稿状态监控通知工具
 2. Aries MTS / ScholarOne (mts-*.nature.com 等)
    覆盖 Nature Communications 等 Nature 系列期刊。
    纯 requests 实现，无需浏览器。
+
+3. Editorial Manager (editorialmanager.com/<期刊代码>)
+   覆盖 Geoscience Frontiers、Elsevier/KeAi 等大量期刊。
+   Playwright 登录，监控作者视角各板块的全部稿件。
 
 用法：
     python monitor.py --once              # 检查一次（配合计划任务/cron）
@@ -84,13 +88,15 @@ class App:
                 os.environ["SNM_SMTP_AUTH_CODE"]
         self.state_file = Path(args.config).parent / "state.json"
         self.storage_file = Path(args.config).parent / "sn_storage.json"
+        self.em_storage_file = Path(args.config).parent / "em_storage.json"
         self.log_file = Path(args.config).parent / "monitor.log"
 
     # ---------------- state ----------------
     def load_state(self):
         if self.state_file.exists():
             return json.loads(self.state_file.read_text(encoding="utf-8"))
-        return {"sn": {}, "mts": {}, "_meta": {"consecutive_failures": 0, "alert_sent": False}}
+        return {"sn": {}, "mts": {}, "em": {},
+                "_meta": {"consecutive_failures": 0, "alert_sent": False}}
 
     def save_state(self, st):
         self.state_file.write_text(json.dumps(st, ensure_ascii=False, indent=2),
@@ -355,7 +361,206 @@ def mts_run(app, check_only_ms=None):
     return result
 
 
+# ---------------------------------------------------------------- Editorial Manager
+
+# EM 稿件列表表格解析：定位含 Current Status 表头的数据表，按表头取列
+JS_PARSE_EM_ROWS = """() => {
+    for (const tb of document.querySelectorAll('table')) {
+        const trs = [...tb.querySelectorAll('tr')];
+        const hi = trs.findIndex(tr => /Current Status/i.test(tr.textContent));
+        if (hi === -1) continue;
+        const head = [...trs[hi].querySelectorAll('th,td')]
+            .map(c => c.textContent.replace(/\\s+/g, ' ').trim());
+        const gi = (n, cs) => {
+            const i = head.findIndex(h => h.toLowerCase().includes(n.toLowerCase()));
+            return i >= 0 && i < cs.length ? cs[i] : '';
+        };
+        const rows = [];
+        for (const tr of trs.slice(hi + 1)) {
+            const cs = [...tr.querySelectorAll('td')]
+                .map(c => c.textContent.replace(/\\s+/g, ' ').trim());
+            if (!cs.length) continue;
+            const title = gi('Title', cs);
+            if (!title) continue;
+            const link = tr.querySelector('a[href]');
+            rows.push({
+                number: gi('Manuscript Number', cs),
+                title: title,
+                submitted: gi('Initial Date', cs),
+                status_date: gi('Status Date', cs),
+                status: gi('Current Status', cs),
+                url: link ? link.href : ''
+            });
+        }
+        if (rows.length) return rows;
+    }
+    return [];
+}"""
+
+
+def em_run(app):
+    """Editorial Manager：返回 {key: {status,...}}，key=稿件号（无则用标题）。
+    监控作者菜单下所有非零板块的全部稿件。"""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        raise RuntimeError("EM 平台监控需要 Playwright：pip install playwright && "
+                           "python -m playwright install chromium")
+
+    cfg = app.cfg["em"]
+    base = cfg["base"].rstrip("/")
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        ctx = browser.new_context(
+            user_agent=UA, locale="en-US",
+            storage_state=str(app.em_storage_file) if app.em_storage_file.exists() else None)
+        page = ctx.new_page()
+
+        def accept_cookies(frame):
+            try:
+                frame.click("button:has-text('Accept all cookies')", timeout=3000)
+                page.wait_for_timeout(800)
+            except Exception:
+                pass
+
+        def find_menu_frame():
+            return next((f for f in page.frames if "MainMenu" in f.url), None)
+
+        def wait_menu(timeout_s):
+            deadline = time.time() + timeout_s
+            while time.time() < deadline:
+                m = find_menu_frame()
+                if m is not None:
+                    return m
+                page.wait_for_timeout(1000)
+            return None
+
+        def do_login():
+            page.goto(base + "/default.aspx", wait_until="domcontentloaded", timeout=90000)
+            page.wait_for_timeout(3000)
+            accept_cookies(page.main_frame)
+            page.click("a#Login", timeout=20000)
+            page.wait_for_timeout(4000)
+            lf = next((f for f in page.frames if "login.ashx" in f.url), None)
+            if lf is None:
+                raise RuntimeError("EM 未找到登录框（%s）" % page.url[:100])
+            lf.evaluate("""([email, pwd]) => {
+                const byName = n => document.getElementsByName(n)[0];
+                const a = byName('authorLogin'); if (a) a.click();
+                const setV = (el, v) => { const s = Object.getOwnPropertyDescriptor(
+                    HTMLInputElement.prototype,'value').set; s.call(el, v);
+                    el.dispatchEvent(new Event('input',{bubbles:true})); };
+                setV(document.getElementById('username'), email);
+                setV(document.getElementsByName('password')[0], pwd);
+                document.getElementById('loginButton').click();
+            }""", [cfg["email"], cfg["password"]])
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=25000)
+            except Exception:
+                pass
+            menu = wait_menu(20)
+            if menu is None:
+                raise RuntimeError("EM 登录后未进入作者主菜单（账号密码错误？）")
+            accept_cookies(menu)
+            return menu
+
+        page.goto(base + "/default2.aspx", wait_until="domcontentloaded", timeout=90000)
+        page.wait_for_timeout(4000)
+        menu = wait_menu(6)
+
+        if menu is None:
+            body_text = ""
+            try:
+                body_text = page.inner_text("body")
+            except Exception:
+                pass
+            if "Logout" in body_text:
+                # 会话有效，内容 frame 只是停在上次页面 -> 直接进作者主菜单
+                log("EM 会话有效，跳转作者主菜单 ...", app.log_file)
+                page.goto(base + "/AuthorMainMenu.aspx",
+                          wait_until="domcontentloaded", timeout=90000)
+                menu = wait_menu(15)
+            if menu is None:
+                log("EM 登录会话失效，重新登录 ...", app.log_file)
+                menu = do_login()
+        else:
+            accept_cookies(menu)
+
+        ctx.storage_state(path=str(app.em_storage_file))
+        accept_cookies(menu)
+
+        # 菜单里 count>0 的板块才是链接（等菜单内容渲染完成）
+        links = []
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            links = menu.evaluate("""() =>
+                [...document.querySelectorAll('a[href*=".asp"]')]
+                    .map(a => ({text: a.textContent.trim(),
+                                href: a.getAttribute('href')}))
+                    .filter(x => /auth_|revision/i.test(x.href))
+            """)
+            if links:
+                break
+            page.wait_for_timeout(1500)
+        if not links:
+            raise RuntimeError("EM 作者菜单没有稿件板块链接（菜单页可能改版）")
+
+        journal = cfg.get("label") or base.rstrip("/").split("/")[-1].upper()
+
+        def parse_rows(page, asp_name):
+            page.goto(base + "/" + asp_name, wait_until="domcontentloaded", timeout=90000)
+            fname = asp_name.split("?")[0]
+            frame, deadline = None, time.time() + 20
+            while time.time() < deadline and frame is None:
+                frame = next((f for f in page.frames if fname in f.url), None)
+                if frame is None:
+                    page.wait_for_timeout(1000)
+            if frame is None:
+                raise RuntimeError("EM 内容 frame 未找到: %s" % asp_name)
+            page.wait_for_timeout(1500)
+            # 数据表随渲染异步出现，轮询直到拿到行（板块链接只在 count>0 时出现，
+            # 正常必有行；超时则视为空）
+            rows, deadline = [], time.time() + 15
+            while time.time() < deadline:
+                rows = frame.evaluate(JS_PARSE_EM_ROWS)
+                if rows:
+                    break
+                page.wait_for_timeout(1500)
+            out = {}
+            for r in rows:
+                key = r["number"] or norm(r["title"])[:80]
+                r["journal"] = journal
+                r["signature"] = "%s|%s|%s" % (norm(r["title"])[:120],
+                                               norm(r["status"]), norm(r["status_date"]))
+                out[key] = r
+            return out
+
+        result = {}
+        for l in links:
+            for key, row in parse_rows(page, l["href"]).items():
+                result[key] = row
+        browser.close()
+        return result
+
+
 # ---------------------------------------------------------------- 主逻辑
+
+def enabled_platforms(cfg):
+    """platform 配置归一化：支持 "sn"/"mts"/"em"/"both"/"all" 或它们的列表。"""
+    p = cfg.get("platform", "sn")
+    if isinstance(p, str):
+        p = [p]
+    out = set()
+    for x in p:
+        if x == "all":
+            out |= {"sn", "mts", "em"}
+        elif x == "both":
+            out |= {"sn", "mts"}
+        else:
+            out.add(x)
+    return out
+
 
 def check_once(app):
     st = app.load_state()
@@ -363,17 +568,20 @@ def check_once(app):
     st["_meta"]["last_check"] = now
 
     try:
-        sn_cards, mts_items = {}, {}
-        if app.cfg.get("platform") in ("sn", "both"):
+        sn_cards, mts_items, em_items = {}, {}, {}
+        plats = enabled_platforms(app.cfg)
+        if "sn" in plats:
             watch = app.cfg.get("sn", {}).get("watch", "all")
             only = None
             if isinstance(watch, list):
                 only = {u.rstrip("/").split("/")[-1] for u in watch}
             sn_cards = sn_run(app, only)
-        if app.cfg.get("platform") in ("mts", "both"):
+        if "mts" in plats:
             only_ms = app.cfg.get("mts", {}).get("ms_id") if app.cfg.get(
                 "mts", {}).get("watch") != "all" else None
             mts_items = mts_run(app, only_ms)
+        if "em" in plats:
+            em_items = em_run(app)
     except Exception as e:
         st["_meta"]["consecutive_failures"] = st["_meta"].get("consecutive_failures", 0) + 1
         log("检查失败(%d): %s" % (st["_meta"]["consecutive_failures"], e), app.log_file)
@@ -428,9 +636,24 @@ def check_once(app):
         else:
             st["mts"][key]["status"] = item["status"]
 
+    for key, item in em_items.items():
+        old = st["em"].get(key)
+        if old is None:
+            fresh = True
+            st["em"][key] = {k: item.get(k) for k in
+                             ("signature", "journal", "title", "status", "number",
+                              "status_date", "url")}
+            log("EM 基线 [%s] %s: %s" % (item.get("journal", key), key, item["status"]),
+                app.log_file)
+        elif old["signature"] != item["signature"]:
+            changes.append(("em", key, item, old))
+        else:
+            st["em"][key]["status"] = item["status"]
+            st["em"][key]["status_date"] = item.get("status_date")
+
     if fresh and not changes:
         app.save_state(st)
-        if not st["sn"] and not st["mts"]:
+        if not (st["sn"] or st["mts"] or st["em"]):
             log("无变化（空结果）", app.log_file)
         return 0
 
@@ -460,9 +683,12 @@ def check_once(app):
                           else item["status"])
             if first is None:
                 first = (item.get("journal"), new_status)
+            num = item.get("number") or item.get("ms_number")
             parts.append(
-                "◆ %s\n  标题: %s\n  版本: %s\n  旧状态: %s\n  新状态: %s%s\n  链接: %s"
-                % (item.get("journal") or "-", item.get("title") or "-",
+                "◆ %s%s\n  标题: %s\n  版本: %s\n  旧状态: %s\n  新状态: %s%s\n  链接: %s"
+                % (item.get("journal") or "-",
+                   ("（%s）" % num) if num else "",
+                   item.get("title") or "-",
                    item.get("version") or "-", old_status, new_status,
                    ("\n  详情:\n" + indent(detail["status_block"] + "\n" + (detail["progress"] or "")))
                    if detail else "", item.get("url") or "-"))
@@ -471,7 +697,8 @@ def check_once(app):
             bucket[key].update({
                 "signature": item["signature"],
                 "status": new_status,
-                **{f: item.get(f) for f in ("journal", "title", "version", "ms_number")
+                **{f: item.get(f) for f in ("journal", "title", "version", "ms_number",
+                                            "number", "status_date", "url")
                    if item.get(f)}})
         browser.close()
 
@@ -506,11 +733,13 @@ def show_state(app):
     print("上次检查: %s | 上次成功: %s | 连续失败: %s"
           % (meta.get("last_check"), meta.get("last_ok_check"),
              meta.get("consecutive_failures")))
-    for platform in ("sn", "mts"):
+    for platform in ("sn", "mts", "em"):
         for key, it in st.get(platform, {}).items():
-            print("[%s] %s\n    %s | %s | %s" % (
+            extra = it.get("status_date") or it.get("version") or ""
+            print("[%s] %s\n    %s | %s | %s%s" % (
                 platform, it.get("journal") or "-", it.get("ms_number") or key,
-                it.get("version") or "-", it.get("status") or "-"))
+                extra, it.get("status") or "-",
+                "" if not (it.get("title")) else "\n    " + it["title"][:70]))
     if not st.get("sn") and not st.get("mts"):
         print("（还没有基线，先运行一次检查）")
 
