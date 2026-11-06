@@ -437,6 +437,8 @@ def em_run(app):
             return None
 
         def do_login():
+            if cfg.get("sso") == "elsevier":
+                return do_sso_login()
             page.goto(base + "/default.aspx", wait_until="domcontentloaded", timeout=90000)
             page.wait_for_timeout(3000)
             accept_cookies(page.main_frame)
@@ -465,6 +467,46 @@ def em_run(app):
             accept_cookies(menu)
             return menu
 
+        def do_sso_login():
+            """Elsevier 账号 SSO：id.editorialmanager.com -> id.elsevier.com -> 回 EM。"""
+            from urllib.parse import quote
+            code = base.rstrip("/").split("/")[-1]
+            redirect = base + "/AuthorMainMenu.aspx"
+            sso_url = ("https://id.editorialmanager.com?journalAcronym=" + code +
+                       "&redirectUrl=" + quote(redirect, safe="") +
+                       "&embedded=true&provider=ELSEVIER")
+            log("EM 走 Elsevier SSO 登录 ...", app.log_file)
+            page.goto(sso_url, wait_until="domcontentloaded", timeout=90000)
+            page.wait_for_timeout(6000)
+            try:
+                page.click("#onetrust-reject-all-handler", timeout=3000)
+            except Exception:
+                pass
+            page.fill('input[name="pf.username"]', cfg["email"])
+            page.click("#bdd-elsPrimaryBtn", timeout=15000)
+            page.wait_for_timeout(6000)
+            if page.query_selector('input[type="password"]') is None:
+                raise RuntimeError("Elsevier SSO 未出现密码输入框（邮箱错误或流程变化）")
+            page.fill('input[type="password"]', cfg["password"])
+            page.click("#bdd-elsPrimaryBtn", timeout=15000)
+            deadline = time.time() + 40
+            while time.time() < deadline:
+                m = find_menu_frame()
+                if m is not None:
+                    break
+                # Ping 的 "Stay signed in?" 中间页 -> 点 Yes
+                if "Stay+signed+in" in page.url or "Stay signed in" in page.url:
+                    try:
+                        page.click("#accept-button, button:has-text('Yes')", timeout=3000)
+                    except Exception:
+                        pass
+                page.wait_for_timeout(2000)
+            menu = find_menu_frame()
+            if menu is None:
+                raise RuntimeError("EM Elsevier SSO 后未进入作者主菜单（凭据错误或 MFA？）")
+            accept_cookies(menu)
+            return menu
+
         page.goto(base + "/default2.aspx", wait_until="domcontentloaded", timeout=90000)
         page.wait_for_timeout(4000)
         menu = wait_menu(6)
@@ -490,9 +532,9 @@ def em_run(app):
         ctx.storage_state(path=str(app.em_storage_file))
         accept_cookies(menu)
 
-        # 菜单里 count>0 的板块才是链接（等菜单内容渲染完成）
+        # 菜单里 count>0 的板块才是链接（等菜单内容渲染完成，SSO 首登较慢）
         links = []
-        deadline = time.time() + 15
+        deadline = time.time() + 30
         while time.time() < deadline:
             links = menu.evaluate("""() =>
                 [...document.querySelectorAll('a[href*=".asp"]')]

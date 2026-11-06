@@ -70,7 +70,9 @@ python -m playwright install chromium
     "label": "Geoscience Frontiers",                  // 可选，通知里显示的期刊名
     "email": "you@example.com",
     "password": "YOUR_PASSWORD",
-    "watch": "all"
+    "watch": "all",
+    "sso": "elsevier"          // 可选：该刊用「Continue with Elsevier」登录时填写；
+                               // 此时 email/password 填 Elsevier 账号的
   },
   "notify": {
     "toast": true,             // Windows 弹窗（非 Windows 自动忽略）
