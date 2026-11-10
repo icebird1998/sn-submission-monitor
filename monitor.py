@@ -424,6 +424,20 @@ def em_run(app):
             except Exception:
                 pass
 
+        def em_goto(url, wait_until="domcontentloaded", timeout=90000):
+            transient = ("ERR_CONNECTION_CLOSED", "ERR_CONNECTION_RESET",
+                         "ERR_TIMED_OUT", "ERR_NETWORK_CHANGED")
+            for attempt in range(3):
+                try:
+                    return page.goto(url, wait_until=wait_until, timeout=timeout)
+                except Exception as e:
+                    if attempt == 2 or not any(code in str(e) for code in transient):
+                        raise
+                    delay = 2 * (attempt + 1)
+                    log("EM 网络连接暂断，第 %d/3 次重试（%d 秒后）: %s" %
+                        (attempt + 1, delay, str(e).splitlines()[0][:120]), app.log_file)
+                    page.wait_for_timeout(delay * 1000)
+
         def find_menu_frame():
             return next((f for f in page.frames if "MainMenu" in f.url), None)
 
@@ -439,7 +453,7 @@ def em_run(app):
         def do_login():
             if cfg.get("sso") == "elsevier":
                 return do_sso_login()
-            page.goto(base + "/default.aspx", wait_until="domcontentloaded", timeout=90000)
+            em_goto(base + "/default.aspx", wait_until="domcontentloaded", timeout=90000)
             page.wait_for_timeout(3000)
             accept_cookies(page.main_frame)
             page.click("a#Login", timeout=20000)
@@ -476,7 +490,7 @@ def em_run(app):
                        "&redirectUrl=" + quote(redirect, safe="") +
                        "&embedded=true&provider=ELSEVIER")
             log("EM 走 Elsevier SSO 登录 ...", app.log_file)
-            page.goto(sso_url, wait_until="domcontentloaded", timeout=90000)
+            em_goto(sso_url, wait_until="domcontentloaded", timeout=90000)
             page.wait_for_timeout(6000)
             try:
                 page.click("#onetrust-reject-all-handler", timeout=3000)
@@ -489,7 +503,7 @@ def em_run(app):
                 raise RuntimeError("Elsevier SSO 未出现密码输入框（邮箱错误或流程变化）")
             page.fill('input[type="password"]', cfg["password"])
             page.click("#bdd-elsPrimaryBtn", timeout=15000)
-            deadline = time.time() + 40
+            deadline = time.time() + 90
             while time.time() < deadline:
                 m = find_menu_frame()
                 if m is not None:
@@ -500,14 +514,15 @@ def em_run(app):
                         page.click("#accept-button, button:has-text('Yes')", timeout=3000)
                     except Exception:
                         pass
-                page.wait_for_timeout(2000)
+                # EM may redirect through the Identity page before loading Default.aspx.
+                page.wait_for_timeout(1500)
             menu = find_menu_frame()
             if menu is None:
                 raise RuntimeError("EM Elsevier SSO 后未进入作者主菜单（凭据错误或 MFA？）")
             accept_cookies(menu)
             return menu
 
-        page.goto(base + "/default2.aspx", wait_until="domcontentloaded", timeout=90000)
+        em_goto(base + "/default2.aspx", wait_until="domcontentloaded", timeout=90000)
         page.wait_for_timeout(4000)
         menu = wait_menu(6)
 
@@ -520,8 +535,8 @@ def em_run(app):
             if "Logout" in body_text:
                 # 会话有效，内容 frame 只是停在上次页面 -> 直接进作者主菜单
                 log("EM 会话有效，跳转作者主菜单 ...", app.log_file)
-                page.goto(base + "/AuthorMainMenu.aspx",
-                          wait_until="domcontentloaded", timeout=90000)
+                em_goto(base + "/AuthorMainMenu.aspx",
+                        wait_until="domcontentloaded", timeout=90000)
                 menu = wait_menu(15)
             if menu is None:
                 log("EM 登录会话失效，重新登录 ...", app.log_file)
@@ -532,9 +547,9 @@ def em_run(app):
         ctx.storage_state(path=str(app.em_storage_file))
         accept_cookies(menu)
 
-        # 菜单里 count>0 的板块才是链接（等菜单内容渲染完成，SSO 首登较慢）
+        # 菜单里 count>0 的板块才是链接（Fuel 的 SSO 回跳和菜单渲染更慢）
         links = []
-        deadline = time.time() + 30
+        deadline = time.time() + 60
         while time.time() < deadline:
             links = menu.evaluate("""() =>
                 [...document.querySelectorAll('a[href*=".asp"]')]
