@@ -1,0 +1,14 @@
+{
+  "platform": "em",
+  "em": {
+    "base": "https://www.editorialmanager.com/JOURNAL_CODE",
+    "label": "Example journal",
+    "email": "you@example.com",
+    "password": "",
+    "sso": "elsevier",
+    "watch": [{"title": "Example manuscript title", "submitted": "Nov 1, 2026"}]
+  },
+  "notify": {"toast": true, "email": {"enabled": false}},
+  "interval_minutes": 15,
+  "fail_alert_after": 6
+}

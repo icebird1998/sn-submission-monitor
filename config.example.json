@@ -1,38 +1,26 @@
 {
-  "platform": "sn",
-
-  "sn": {
-    "email": "you@example.com",
-    "password": "YOUR_SN_PASSWORD",
-    "watch": "all"
-  },
-
-  "mts": {
-    "base": "https://mts-ncomms.nature.com",
-    "email": "you@example.com",
-    "password": "YOUR_MTS_PASSWORD",
-    "watch": "all",
-    "ms_id": null
-  },
-
+  "platform": "em",
   "em": {
     "base": "https://www.editorialmanager.com/JOURNAL_CODE",
-    "label": "Optional Journal Display Name",
+    "label": "Your journal",
     "email": "you@example.com",
-    "password": "YOUR_EM_PASSWORD",
-    "watch": "all"
+    "password": "",
+    "sso": "elsevier",
+    "watch": ["EXAMPLE-D-26-00001"]
   },
-
   "notify": {
     "toast": true,
     "email": {
+      "enabled": true,
       "smtp_host": "smtp.qq.com",
       "smtp_port": 465,
+      "smtp_security": "ssl",
       "smtp_user": "you@example.com",
-      "smtp_auth_code": "YOUR_SMTP_AUTH_CODE",
+      "smtp_auth_code": "",
       "to": "you@example.com"
     }
   },
-
-  "fail_alert_after": 6
+  "interval_minutes": 15,
+  "fail_alert_after": 6,
+  "network": {"attempts": 3, "timeout_seconds": 45}
 }

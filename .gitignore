@@ -1,11 +1,67 @@
-# 个人配置与运行时数据，切勿提交
-config.json
-state.json
-sn_storage.json
-*.log
-*.log.1
+# Private configuration and runtime data. Ignore rules do not untrack existing files.
+.local/
+.runtime/
+/private/
+/runtime/
+/logs/
+/screenshots/
+/traces/
+/downloads/
+config*.json
+state*.json
+*storage*.json
+*cookie*.json
+*session*.json
+outbox*.json*
+monitor.lock
+state*.lock
+*.pid
+*.log*
+*.bak
+*.tmp
+*.orig
+.env*
 
+# Explicitly public, synthetic examples and test fixtures only.
+!config.example.json
+!examples/**/config*.json
+!tests/fixtures/**/config*.json
+!tests/fixtures/**/state*.json
+!tests/fixtures/**/*storage*.json
+!tests/fixtures/**/*cookie*.json
+!tests/fixtures/**/*session*.json
+!tests/fixtures/**/outbox*.json*
+!tests/fixtures/**/*.log*
+!.env.example
+
+# Python environments, caches, packages, and test output.
+.venv/
+venv/
+env/
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
 .playwright/
-em_storage.json
+ms-playwright/
+playwright-report/
+test-results/
+
+# Editor / OS artifacts.
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,13 @@
+{
+  "platform": "mts",
+  "mts": {
+    "base": "https://mts-ncomms.nature.com",
+    "email": "you@example.com",
+    "password": "",
+    "watch": "single",
+    "ms_id": "123456"
+  },
+  "notify": {"toast": true, "email": {"enabled": false}},
+  "interval_minutes": 15,
+  "fail_alert_after": 6
+}

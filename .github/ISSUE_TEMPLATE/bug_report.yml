@@ -1,0 +1,65 @@
+name: Bug report / 问题反馈
+description: Report a reproducible problem without private account or manuscript data.
+title: '[Bug] '
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please read SECURITY.md before posting. For security vulnerabilities use a private report, not this form.
+        不要上传真实配置、状态、Cookie、会话、原始日志、网页/邮件导出或截图。Never share passwords, SMTP auth codes, unpublished manuscript details, identifying URLs, or real account data. Use synthetic examples only.
+        eJournalPress MTS is not ScholarOne; universal journal/SSO support is not promised.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy review / 隐私检查
+      options:
+        - label: I have removed all secrets and private account/manuscript data; I am not attaching runtime files or raw logs.
+          required: true
+        - label: I have read the relevant README limitations and checked for an existing issue.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit / 版本
+      placeholder: 'v0.2 development / commit identifier if known'
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS and Python / 系统与 Python
+      placeholder: 'Windows 11, Python 3.12; repository .venv'
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Affected component / 组件
+      options:
+        - SN submission platform
+        - eJournalPress MTS (not ScholarOne)
+        - Editorial Manager
+        - CLI / config / state / notifications
+        - Windows setup / scheduled task
+        - Other / unsure
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction / 最小复现
+      description: Describe the mode and steps using fake values. Replace private paths. Do not run a live check solely to fill this form.
+      placeholder: 'Command mode: --check-config; synthetic setup; steps to reproduce...'
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior / 预期与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Optional sanitized details / 可选脱敏信息
+      description: A short manually reviewed error excerpt or local diagnostic summary only. No raw logs, credentials, manuscript titles/numbers, session files, or screenshots.

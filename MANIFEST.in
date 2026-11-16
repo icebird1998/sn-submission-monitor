@@ -1,0 +1,16 @@
+include LICENSE README.md README.en.md SECURITY.md CONTRIBUTING.md CHANGELOG.md
+include requirements.txt config.example.json monitor.py
+include setup_windows.bat install_task.bat uninstall_task.bat
+recursive-include examples *.json
+recursive-include scripts *.ps1
+recursive-include tools *.py
+recursive-include tests *.py *.html *.json
+prune .local
+prune .runtime
+prune private
+prune runtime
+prune .venv
+exclude config.json state.json
+exclude *_storage.json
+exclude .env .env.*
+global-exclude *.pyc *.pyo *.log *.log.* *.bak *.tmp *.pem *.key *.pfx

@@ -1,0 +1,13 @@
+{
+  "platform": "em",
+  "em": {
+    "base": "https://www.editorialmanager.com/JOURNAL_CODE",
+    "label": "Example journal",
+    "email": "you@example.com",
+    "password": "",
+    "watch": ["EXAMPLE-D-26-00001"]
+  },
+  "notify": {"toast": true, "email": {"enabled": false}},
+  "interval_minutes": 15,
+  "fail_alert_after": 6
+}

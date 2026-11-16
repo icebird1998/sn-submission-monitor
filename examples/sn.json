@@ -1,0 +1,11 @@
+{
+  "platform": "sn",
+  "sn": {
+    "email": "you@example.com",
+    "password": "",
+    "watch": ["00000000-0000-0000-0000-000000000001"]
+  },
+  "notify": {"toast": true, "email": {"enabled": false}},
+  "interval_minutes": 15,
+  "fail_alert_after": 6
+}

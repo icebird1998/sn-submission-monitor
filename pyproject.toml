@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sn-submission-monitor"
+version = "0.2.0"
+description = "Local manuscript status monitor for Springer Nature, eJournalPress MTS and Editorial Manager"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "sn-submission-monitor contributors"}]
+keywords = ["manuscript", "submission", "editorial-manager", "notification", "springer-nature"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering",
+]
+dependencies = ["requests>=2.32.3,<3", "playwright>=1.48,<2"]
+
+[project.urls]
+Repository = "https://github.com/icebird1998/sn-submission-monitor"
+Issues = "https://github.com/icebird1998/sn-submission-monitor/issues"
+
+[project.scripts]
+sn-submission-monitor = "submission_monitor.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["submission_monitor", "submission_monitor.*"]
+
+[tool.setuptools]
+include-package-data = false
